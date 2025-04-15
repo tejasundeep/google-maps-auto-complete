@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<title>Location Autocomplete</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<!-- Google Places API -->
+		<script>
+			(g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})({
+			  key: "API_KEY",
+			  v: "weekly"
+			});
+			
+			async function initGoogleMaps() {
+			// Load the Places library
+			const {
+				AutocompleteSuggestion
+			} = await google.maps.importLibrary("places");
+
+			const input = document.getElementById("locationInput");
+			const dropdown = document.getElementById("locationDropdown");
+
+			input.addEventListener("input", async () => {
+				const query = input.value;
+				if (query.trim()) {
+					try {
+						const request = {
+							input: query,
+							includedRegionCodes: ["IN"]
+						};
+
+						const {
+							suggestions
+						} = await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
+
+						if (suggestions && suggestions.length > 0) {
+							dropdown.innerHTML = "";
+							suggestions.forEach(suggestion => {
+								const div = document.createElement("div");
+								div.className = "dropdown-item";
+								div.textContent = suggestion.placePrediction.text.text;
+								div.onclick = () => {
+									input.value = suggestion.placePrediction.text.text;
+									dropdown.style.display = "none";
+								};
+								dropdown.appendChild(div);
+							});
+							dropdown.style.display = "block";
+						} else {
+							dropdown.style.display = "none";
+						}
+					} catch (error) {
+						console.error("Error fetching predictions:", error);
+						dropdown.style.display = "none";
+					}
+				} else {
+					dropdown.style.display = "none";
+				}
+			});
+
+			document.addEventListener("click", e => {
+				if (e.target !== input && !dropdown.contains(e.target)) {
+					dropdown.style.display = "none";
+				}
+			});
+		}
+
+		// Call initGoogleMaps when document is fully loaded
+		if (document.readyState === 'loading') {
+			document.addEventListener('DOMContentLoaded', initGoogleMaps);
+		} else {
+			initGoogleMaps();
+		}
+		</script>
+		<style>
+			body {
+				font-family: Arial, sans-serif;
+				background-color: #f4f4f9;
+				margin: 0;
+				padding: 0;
+			}
+		
+			.container {
+				max-width: 600px;
+				margin: 50px auto;
+				padding: 20px;
+				background: #fff;
+				box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+				border-radius: 8px;
+			}
+		
+			h1 {
+				text-align: center;
+				color: #333;
+			}
+		
+			.location-selector {
+				position: relative;
+				margin-top: 20px;
+				display: flex;
+				gap: 10px;
+			}
+		
+			#locationInput {
+				flex: 1;
+				padding: 10px;
+				font-size: 16px;
+				border: 1px solid #ccc;
+				border-radius: 4px;
+				box-sizing: border-box;
+			}
+		
+			#getCurrentLocation {
+				padding: 10px;
+				background-color: #4285f4;
+				color: white;
+				border: none;
+				border-radius: 4px;
+				cursor: pointer;
+				font-size: 16px;
+			}
+		
+			#getCurrentLocation:hover {
+				background-color: #3367d6;
+			}
+		
+			.dropdown {
+				position: absolute;
+				top: 40px;
+				left: 0;
+				width: 100%;
+				background: #fff;
+				border: 1px solid #ccc;
+				border-radius: 4px;
+				max-height: 200px;
+				overflow-y: auto;
+				z-index: 1000;
+				box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+			}
+		
+			.dropdown-item {
+				padding: 10px;
+				cursor: pointer;
+				border-bottom: 1px solid #eaeaea;
+			}
+		
+			.dropdown-item:last-child {
+				border-bottom: none;
+			}
+		
+			.dropdown-item:hover {
+				background: #f0f0f0;
+			}
+			
+			.pac-container {
+				z-index: 1051 !important;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<h1>Select Your Location</h1>
+			<div class="location-selector">
+				<input id="locationInput" type="text" placeholder="📍 Type your location" />
+				<button id="getCurrentLocation" title="Get current location">📍</button>
+				<div id="locationDropdown" class="dropdown" style="display: none;"></div>
+			</div>
+		</div>
+		<script>
+			const input = document.getElementById("locationInput");
+			const dropdown = document.getElementById("locationDropdown");
+			const getLocationBtn = document.getElementById("getCurrentLocation");
+			
+			getLocationBtn.addEventListener("click", () => {
+			  if (navigator.geolocation) {
+			    getLocationBtn.textContent = "...";
+			    navigator.geolocation.getCurrentPosition(
+			      async (position) => {
+			        const { latitude, longitude } = position.coords;
+			        
+			        try {
+			          // Load the Geocoder
+			          const { Geocoder } = await google.maps.importLibrary("geocoding");
+			          const geocoder = new Geocoder();
+			          
+			          // Get address from coordinates
+			          const response = await geocoder.geocode({
+			            location: { lat: latitude, lng: longitude }
+			          });
+			          
+			          if (response.results[0]) {
+			            input.value = response.results[0].formatted_address;
+			          } else {
+			            input.value = `${latitude}, ${longitude}`;
+			          }
+			        } catch (error) {
+			          console.error("Geocoding error:", error);
+			          input.value = `${latitude}, ${longitude}`;
+			        }
+			        
+			        getLocationBtn.textContent = "📍";
+			      },
+			      (error) => {
+			        console.error("Geolocation error:", error);
+			        alert("Unable to retrieve your location. Please check your location settings.");
+			        getLocationBtn.textContent = "📍";
+			      },
+			      { timeout: 10000 }
+			    );
+			  } else {
+			    alert("Geolocation is not supported by this browser.");
+			  }
+			});
+		</script>
+	</body>
+</html>
