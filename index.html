@@ -6,71 +6,109 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<!-- Google Places API -->
 		<script>
-			(g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})({
-			  key: "API_KEY",
-			  v: "weekly"
-			});
-			
-			async function initGoogleMaps() {
-			// Load the Places library
-			const {
-				AutocompleteSuggestion
-			} = await google.maps.importLibrary("places");
+			(e=>{var a,r,o,s="google",n="importLibrary",t="__ib__",c=document,p=window,i=(p=p[s]||(p[s]={})).maps||(p.maps={}),m=new Set,l=new URLSearchParams;i[n]||(i[n]=(p,...d)=>m.add(p)&&(a||(a=new Promise((async(n,p)=>{for(o in await(r=c.createElement("script")),l.set("libraries",[...m]+""),e)l.set(o.replace(/[A-Z]/g,(e=>"_"+e[0].toLowerCase())),e[o]);l.set("callback",s+".maps."+t),r.src=`https://maps.${s}apis.com/maps/api/js?`+l,i[t]=n,r.onerror=()=>a=p(Error("The Google Maps JavaScript API could not load.")),r.nonce=c.querySelector("script[nonce]")?.nonce||"",c.head.append(r)})))).then((()=>i[n](p,...d))))})({key:"API_KEY",v:"weekly"});
 
-			const input = document.getElementById("locationInput");
-			const dropdown = document.getElementById("locationDropdown");
+			const locationAppConfig = {
+				regionCode: "IN",
+				dropdownItemClass: "dropdown-item",
+				loadingText: "...",
+				geolocationTimeout: 10000,
+				errorMessages: {
+					autocomplete: "Autocomplete error:",
+					geolocation: "Geolocation error:",
+					geocoding: "Geocoding error:",
+					notSupported: "Geolocation not supported.",
+					unableToRetrieve: "Unable to retrieve location."
+				}
+			};
 
-			input.addEventListener("input", async () => {
-				const query = input.value;
-				if (query.trim()) {
+			async function _setupAutocompleteListeners(inputEl, dropdownEl, AutocompleteSuggestion) {
+				inputEl.addEventListener("input", async () => {
+					const query = inputEl.value.trim();
+					dropdownEl.innerHTML = ""; 
+					dropdownEl.style.display = "none";
+					if (!query) return;
+
 					try {
-						const request = {
-							input: query,
-							includedRegionCodes: ["IN"]
-						};
+						const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({ 
+							input: query, 
+							includedRegionCodes: [locationAppConfig.regionCode]
+						});
+						if (!suggestions?.length) return;
 
-						const {
-							suggestions
-						} = await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
-
-						if (suggestions && suggestions.length > 0) {
-							dropdown.innerHTML = "";
-							suggestions.forEach(suggestion => {
-								const div = document.createElement("div");
-								div.className = "dropdown-item";
-								div.textContent = suggestion.placePrediction.text.text;
-								div.onclick = () => {
-									input.value = suggestion.placePrediction.text.text;
-									dropdown.style.display = "none";
-								};
-								dropdown.appendChild(div);
-							});
-							dropdown.style.display = "block";
-						} else {
-							dropdown.style.display = "none";
-						}
-					} catch (error) {
-						console.error("Error fetching predictions:", error);
-						dropdown.style.display = "none";
+						suggestions.forEach(s => {
+							const item = document.createElement("div");
+							item.className = locationAppConfig.dropdownItemClass;
+							item.textContent = s.placePrediction.text.text;
+							item.onclick = () => (inputEl.value = s.placePrediction.text.text, dropdownEl.style.display = "none");
+							dropdownEl.appendChild(item);
+						});
+						dropdownEl.style.display = "block";
+					} catch (e) { 
+						console.error(locationAppConfig.errorMessages.autocomplete, e);
 					}
-				} else {
-					dropdown.style.display = "none";
-				}
-			});
+				});
+			}
 
-			document.addEventListener("click", e => {
-				if (e.target !== input && !dropdown.contains(e.target)) {
-					dropdown.style.display = "none";
-				}
-			});
-		}
+			async function _setupGeolocationListeners(inputEl, buttonEl, geocoderInstance) {
+				if (!buttonEl) return;
 
-		// Call initGoogleMaps when document is fully loaded
-		if (document.readyState === 'loading') {
-			document.addEventListener('DOMContentLoaded', initGoogleMaps);
-		} else {
-			initGoogleMaps();
-		}
+				buttonEl.addEventListener("click", async () => {
+					if (!navigator.geolocation) return alert(locationAppConfig.errorMessages.notSupported);
+					
+					const originalContent = buttonEl.innerHTML;
+					buttonEl.innerHTML = locationAppConfig.loadingText;
+					
+					try {
+						const pos = await new Promise((resolve, reject) => 
+							navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: locationAppConfig.geolocationTimeout })
+						);
+						const { results } = await geocoderInstance.geocode({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude }});
+						inputEl.value = results?.[0]?.formatted_address || `${pos.coords.latitude}, ${pos.coords.longitude}`;
+					} catch (e) {
+						console.error(locationAppConfig.errorMessages.geolocation, e);
+						alert(locationAppConfig.errorMessages.unableToRetrieve);
+					} finally {
+						buttonEl.innerHTML = originalContent;
+					}
+				});
+			}
+
+			function _setupDropdownDismissListener(inputEl, dropdownEl) {
+				document.addEventListener("click", e => {
+					if (e.target !== inputEl && !dropdownEl.contains(e.target)) dropdownEl.style.display = "none";
+				});
+			}
+
+			async function initializeLocationAutocomplete(inputEl, dropdownEl, buttonEl = null) {
+				const { AutocompleteSuggestion } = await google.maps.importLibrary("places");
+				const { Geocoder } = await google.maps.importLibrary("geocoding");
+				const geocoderInstance = new Geocoder();
+
+				_setupAutocompleteListeners(inputEl, dropdownEl, AutocompleteSuggestion);
+				_setupGeolocationListeners(inputEl, buttonEl, geocoderInstance);
+				_setupDropdownDismissListener(inputEl, dropdownEl);
+			}
+
+			async function init() {
+				document.querySelectorAll(".location-input").forEach(inputEl => {
+					const dropdownId = inputEl.dataset.dropdown;
+					const dropdownEl = document.getElementById(dropdownId);
+					const buttonEl = inputEl.dataset.locationBtn ? document.getElementById(inputEl.dataset.locationBtn) : null;
+
+					if (dropdownEl) {
+						initializeLocationAutocomplete(inputEl, dropdownEl, buttonEl);
+					} else {
+						console.error(`Dropdown element with ID "${dropdownId}" not found for input "${inputEl.id || 'unidentified input'}".`);
+					}
+				});
+			}
+
+			if (document.readyState === 'loading') {
+				document.addEventListener('DOMContentLoaded', init);
+			} else {
+				init();
+			}
 		</script>
 		<style>
 			body {
@@ -161,56 +199,10 @@
 		<div class="container">
 			<h1>Select Your Location</h1>
 			<div class="location-selector">
-				<input id="locationInput" type="text" placeholder="📍 Type your location" />
+				<input id="locationInput" type="text" placeholder="📍 Type your location" class="location-input" data-dropdown="locationDropdown" data-location-btn="getCurrentLocation" />
 				<button id="getCurrentLocation" title="Get current location">📍</button>
 				<div id="locationDropdown" class="dropdown" style="display: none;"></div>
 			</div>
 		</div>
-		<script>
-			const input = document.getElementById("locationInput");
-			const dropdown = document.getElementById("locationDropdown");
-			const getLocationBtn = document.getElementById("getCurrentLocation");
-			
-			getLocationBtn.addEventListener("click", () => {
-			  if (navigator.geolocation) {
-			    getLocationBtn.textContent = "...";
-			    navigator.geolocation.getCurrentPosition(
-			      async (position) => {
-			        const { latitude, longitude } = position.coords;
-			        
-			        try {
-			          // Load the Geocoder
-			          const { Geocoder } = await google.maps.importLibrary("geocoding");
-			          const geocoder = new Geocoder();
-			          
-			          // Get address from coordinates
-			          const response = await geocoder.geocode({
-			            location: { lat: latitude, lng: longitude }
-			          });
-			          
-			          if (response.results[0]) {
-			            input.value = response.results[0].formatted_address;
-			          } else {
-			            input.value = `${latitude}, ${longitude}`;
-			          }
-			        } catch (error) {
-			          console.error("Geocoding error:", error);
-			          input.value = `${latitude}, ${longitude}`;
-			        }
-			        
-			        getLocationBtn.textContent = "📍";
-			      },
-			      (error) => {
-			        console.error("Geolocation error:", error);
-			        alert("Unable to retrieve your location. Please check your location settings.");
-			        getLocationBtn.textContent = "📍";
-			      },
-			      { timeout: 10000 }
-			    );
-			  } else {
-			    alert("Geolocation is not supported by this browser.");
-			  }
-			});
-		</script>
 	</body>
 </html>
